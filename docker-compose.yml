@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - customer_service
+      - order_service
+      - product_service
+
+  customer_service:
+    build:
+      context: ./backend/customer_service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+
+  order_service:
+    build:
+      context: ./backend/order_service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+
+  product_service:
+    build:
+      context: ./backend/product_service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"

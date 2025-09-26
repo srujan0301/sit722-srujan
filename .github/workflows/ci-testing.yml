@@ -61,19 +61,19 @@ jobs:
           echo "⚠ Skipping ACR push here (blocked by student Azure policy)"
           echo "👉 Push manually from local Docker CLI after this job."
 
-  staging:
-    name: Ephemeral Staging Deploy
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
+staging:
+  name: Ephemeral Staging Deploy
+  runs-on: ubuntu-latest
+  needs: build
+  steps:
+    - uses: actions/checkout@v4
 
-      - name: Start staging with Docker Compose
-        run: |
-          docker compose up -d
-          sleep 15
-          curl -f http://localhost:8080 || (docker compose logs && exit 1)
+    - name: Build and Start staging with Docker Compose
+      run: |
+        docker compose up -d --build
+        sleep 20
+        curl -f http://localhost:8080 || (docker compose logs && exit 1)
 
-      - name: Tear down staging
-        if: always()
-        run: docker compose down
+    - name: Tear down staging
+      if: always()
+      run: docker compose down
