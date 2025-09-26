@@ -1,0 +1,76 @@
+name: CI Pipeline (Testing Branch)
+
+on:
+  push:
+    branches: [ testing ]
+
+permissions:
+  contents: read
+
+env:
+  ACR_NAME: srujanacr102d
+  ACR_LOGIN_SERVER: srujanacr102d.azurecr.io
+
+jobs:
+  tests:
+    name: Run backend unit tests (pytest)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [customer_service, order_service, product_service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: backend/${{ matrix.service }}
+        run: |
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run pytest
+        working-directory: backend/${{ matrix.service }}
+        run: pytest -q
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build customer_service
+        run: docker build -f backend/customer_service/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/customer_service:testing backend/customer_service
+
+      - name: Build order_service
+        run: docker build -f backend/order_service/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/order_service:testing backend/order_service
+
+      - name: Build product_service
+        run: docker build -f backend/product_service/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/product_service:testing backend/product_service
+
+      - name: Build frontend
+        run: docker build -f frontend/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/frontend:testing frontend
+
+      - name: Note about push
+        run: |
+          echo "⚠ Skipping ACR push (manual push required from local CLI)."
+
+  staging:
+    name: Ephemeral Staging Deploy
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and Start staging with Docker Compose
+        run: |
+          docker compose up -d --build
+          sleep 20
+          curl -f http://localhost:8080 || (docker compose logs && exit 1)
+
+      - name: Tear down staging
+        if: always()
+        run: docker compose down

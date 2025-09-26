@@ -6,3 +6,5 @@ pydantic
 aio-pika
 pytest
 httpx
+pytest
+
