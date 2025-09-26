@@ -1,0 +1,50 @@
+name: CD on main → rebuild (prod tags) + staging smoke
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  ACR_LOGIN_SERVER: srujanacr102d.azurecr.io
+
+jobs:
+  build:
+    name: Build images with :prod tags
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build customer_service
+        run: docker build -f backend/customer_service/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/customer_service:prod backend/customer_service
+
+      - name: Build order_service
+        run: docker build -f backend/order_service/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/order_service:prod backend/order_service
+
+      - name: Build product_service
+        run: docker build -f backend/product_service/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/product_service:prod backend/product_service
+
+      - name: Build frontend
+        run: docker build -f frontend/Dockerfile -t ${{ env.ACR_LOGIN_SERVER }}/frontend:prod frontend
+
+      - name: Note about push
+        run: |
+          echo "⚠ Skipping Azure push here (AAD app blocked in student tenant)."
+          echo "👉 Push :prod tags from local CLI after this run."
+
+  prod-smoke:
+    name: Local staging smoke (prod artifacts build check)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker Compose smoke (build only)
+        run: |
+          docker compose up -d --build
+          sleep 20
+          curl -f http://localhost:8080 || (docker compose logs && exit 1)
+      - name: Tear down
+        if: always()
+        run: docker compose down
