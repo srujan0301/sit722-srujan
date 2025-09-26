@@ -1,0 +1,71 @@
+name: CI on testing → Test, then Build & Push to ACR
+
+on:
+  push:
+    branches: [ testing ]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR_NAME: srujanacr102d
+  ACR_LOGIN_SERVER: srujanacr102d.azurecr.io
+
+jobs:
+  tests:
+    name: Run backend unit tests (pytest)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [customer_service, order_service, product_service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: backend/${{ matrix.service }}
+        run: |
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run pytest
+        working-directory: backend/${{ matrix.service }}
+        run: pytest -q
+
+  build:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and Push customer_service
+        run: |
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/customer_service:testing ./backend/customer_service
+          docker push ${{ env.ACR_LOGIN_SERVER }}/customer_service:testing
+
+      - name: Build and Push order_service
+        run: |
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:testing ./backend/order_service
+          docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:testing
+
+      - name: Build and Push product_service
+        run: |
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/product_service:testing ./backend/product_service
+          docker push ${{ env.ACR_LOGIN_SERVER }}/product_service:testing
+
+      - name: Build and Push frontend
+        run: |
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:testing ./frontend
+          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:testing
