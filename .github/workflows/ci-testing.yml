@@ -1,11 +1,10 @@
-name: CI on testing → Test, then Build & Push to ACR
+name: CI Pipeline (Testing Branch)
 
 on:
   push:
     branches: [ testing ]
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -37,35 +36,43 @@ jobs:
         run: pytest -q
 
   build:
-    name: Build and Push Docker Images
+    name: Build Docker Images
     runs-on: ubuntu-latest
     needs: tests
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # Build all services locally in runner
+      - name: Build customer_service
+        run: docker build -t ${{ env.ACR_LOGIN_SERVER }}/customer_service:testing ./backend/customer_service
 
-      - name: Build and Push customer_service
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/customer_service:testing ./backend/customer_service
-          docker push ${{ env.ACR_LOGIN_SERVER }}/customer_service:testing
+      - name: Build order_service
+        run: docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:testing ./backend/order_service
 
-      - name: Build and Push order_service
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:testing ./backend/order_service
-          docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:testing
+      - name: Build product_service
+        run: docker build -t ${{ env.ACR_LOGIN_SERVER }}/product_service:testing ./backend/product_service
 
-      - name: Build and Push product_service
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/product_service:testing ./backend/product_service
-          docker push ${{ env.ACR_LOGIN_SERVER }}/product_service:testing
+      - name: Build frontend
+        run: docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:testing ./frontend
 
-      - name: Build and Push frontend
+      - name: Note about push
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:testing ./frontend
-          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:testing
+          echo "⚠ Skipping ACR push here (blocked by student Azure policy)"
+          echo "👉 Push manually from local Docker CLI after this job."
+
+  staging:
+    name: Ephemeral Staging Deploy
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start staging with Docker Compose
+        run: |
+          docker compose up -d
+          sleep 15
+          curl -f http://localhost:8080 || (docker compose logs && exit 1)
+
+      - name: Tear down staging
+        if: always()
+        run: docker compose down
